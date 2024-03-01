@@ -1,0 +1,35 @@
+// Version of proto3
+
+syntax = "proto3";
+
+package calculator;
+
+//The calculator service definition
+service Calculator {
+  rpc Add (AddRequest) returns (AddResponse);
+  rpc AddMult (AddMultRequest) returns (AddMultResponse);
+}
+
+//The request message containing the two numbers to be added
+message AddRequest {
+  int32 num1 = 1;
+  int32 num2 = 2;
+}
+
+//The reponse  message containing the two numbers to be added
+message AddResponse {
+  int32 result = 1;
+}
+
+
+//The request message containing the two numbers to be added and multiplied
+message AddMultRequest {
+  int32 num1 = 1;
+  int32 num2 = 2;
+}
+
+//The response represents the add and mutplication results
+message AddMultResponse {
+  int32 num1 = 1;
+  int32 num2 = 2;
+}

@@ -1,0 +1,43 @@
+syntax = "proto3";
+import "google/protobuf/empty.proto";
+
+message Product {
+  int32 product_identifier = 1; 
+  string product_name = 2; 
+  int32 product_quantity = 3; 
+  float product_price = 4; 
+}
+
+message Status {
+   string status = 1;
+}
+
+message ProductIdentifier {
+   int32 product_identifier = 1;
+}
+
+message Quantity {
+   int32 product_identifier = 1;
+   int32 product_quantity = 2;
+}
+
+
+
+service InventoryService {
+  // Add a new product to the inventory
+  rpc AddProduct(Product) returns (Status);
+
+  // Get information about a specific product
+  rpc GetProductById(ProductIdentifier) returns (Product);
+
+  // Update the quantity of a product
+  rpc UpdateProductQuantity(Quantity) returns (Product);
+
+  // Delete a product from the inventory
+  rpc DeleteProduct(ProductIdentifier) returns (Status);
+
+  // Get a list of all products in the inventory
+  // rpc GetAllProducts(google.protobuf.Empty) returns stream Product (Status);
+  //rpc GetAllProducts(google.protobuf) returns (stream Product); 
+  rpc GetAllProducts(google.protobuf.Empty) returns (stream Product);
+}

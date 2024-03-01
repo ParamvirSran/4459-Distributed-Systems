@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+service ServerToClientStreamingExample {
+  rpc StreamMessages (Empty) returns (stream Message);
+}
+
+message Message {
+  string content = 1;
+}
+
+message Empty {}
+
