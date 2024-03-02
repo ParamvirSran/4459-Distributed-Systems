@@ -1,17 +1,20 @@
-import GRPC
-import replication_pb2.py
-import replication_pb2_grpc.py
-import heartbeat_service_pb2.py
-import heartbeat_service_pb2_grpc.py
+import grpc
+import replication_pb2
+import replication_pb2_grpc
+import heartbeat_service_pb2
+import heartbeat_service_pb2_grpc
 import time
 import threading
+import logging
+from concurrent import futures
+
 
 port = 50051
 
 # Primary class that implements the replication and heartbeat services and starts the server
 
 
-class Primary(replication_pb2_grpc.ReplicationServicer):
+class Primary(replication_pb2_grpc.SequenceServicer, heartbeat_service_pb2_grpc.ViewServiceServicer):
     def __init__(self, host, port):
         self.host = host
         self.port = port
@@ -24,7 +27,7 @@ class Primary(replication_pb2_grpc.ReplicationServicer):
     def heartbeat(self):
         while True:
             for replica in self.replica_list:
-                channel = GRPC.insecure_channel(replica.host, replica.port)
+                channel = grpc.insecure_channel(replica.host, replica.port)
                 stub = heartbeat_service_pb2_grpc.HeartbeatServiceStub(channel)
                 response = stub.heartbeat(
                     heartbeat_service_pb2.HeartbeatRequest())
@@ -55,11 +58,13 @@ class Primary(replication_pb2_grpc.ReplicationServicer):
         return heartbeat_service_pb2.HeartbeatList(heartbeat=self.heartbeat_list)
 
     def start(self):
-        server = GRPC.server()
-        replication_pb2_grpc.add_ReplicationServicer_to_server(self, server)
-        heartbeat_service_pb2_grpc.add_HeartbeatServiceServicer_to_server(
+        server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+        replication_pb2_grpc.add_SequenceServicer_to_server(self, server)
+        heartbeat_service_pb2_grpc.add_ViewServiceServicer_to_server(
             self, server)
-        server.add_insecure_port(self.host + ":" + self.port)
+
+        server.add_insecure_port(f'[::]:{self.port}')
+        print(f"Server started at {self.host}:{self.port}")
         server.start()
         server.wait_for_termination()
 
