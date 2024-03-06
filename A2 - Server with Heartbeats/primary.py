@@ -1,3 +1,5 @@
+# Paramvir Sran, 251102997
+
 import datetime
 import time
 from concurrent import futures
@@ -10,15 +12,17 @@ import replication_pb2
 import replication_pb2_grpc
 
 
+# Defines the gRPC service for the primary server.
 class PrimarySequenceServicer(replication_pb2_grpc.SequenceServicer):
     def __init__(self):
-        self.data = {}  # Persistent storage for key-value pairs
-        # Establish a channel to communicate with the backup server
+        # Initializes an empty dictionary to store key-value pairs.
+        self.data = {}
+        # Establishes a gRPC channel to the backup server for replication.
         self.backup_channel = grpc.insecure_channel("localhost:50052")
         self.backup_stub = replication_pb2_grpc.SequenceStub(self.backup_channel)
 
     def Write(self, request, context):
-        # Validate input
+        # Validates the incoming request to ensure it contains both key and value.
         if not request.key or not request.value:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details("Key and value cannot be empty.")
@@ -27,12 +31,12 @@ class PrimarySequenceServicer(replication_pb2_grpc.SequenceServicer):
             )
 
         try:
-            # Attempt to forward the request to the backup server
+            # Attempts to replicate the write operation to the backup server.
             self.backup_stub.Write(request)
-            # Assuming success, apply the write operation locally
+            # Upon successful replication, the write operation is applied locally.
             self.data[request.key] = request.value
 
-            # Log the successful operation
+            # Logs the operation with a timestamp.
             current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             with open("primary.txt", "a") as log_file:
                 log_file.write(
@@ -43,7 +47,7 @@ class PrimarySequenceServicer(replication_pb2_grpc.SequenceServicer):
                 ack=f"Write operation successful for {request.key}"
             )
         except grpc.RpcError as e:
-            # Log and handle communication issues with the backup
+            # Handles any communication errors with the backup server.
             context.set_code(grpc.StatusCode.UNAVAILABLE)
             context.set_details("Backup server is unavailable.")
             return replication_pb2.WriteResponse(
@@ -51,7 +55,7 @@ class PrimarySequenceServicer(replication_pb2_grpc.SequenceServicer):
             )
 
     def send_heartbeat(self):
-        # Heartbeat sending logic remains unchanged
+        # Sends heartbeat messages to the ViewService to indicate aliveness.
         with grpc.insecure_channel("localhost:50053") as channel:
             stub = heartbeat_service_pb2_grpc.ViewServiceStub(channel)
             while True:
@@ -66,9 +70,10 @@ class PrimarySequenceServicer(replication_pb2_grpc.SequenceServicer):
                     )
                 except grpc.RpcError as e:
                     print(f"Failed to send heartbeat: {str(e)}")
-                time.sleep(5)  # Maintain 5-second heartbeat interval
+                time.sleep(5)  # Sends a heartbeat every 5 seconds.
 
 
+# Starts and runs the primary server.
 def serve():
     primary_servicer = PrimarySequenceServicer()
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
@@ -83,7 +88,7 @@ def serve():
     except KeyboardInterrupt:
         print("Primary server shutting down.")
     finally:
-        server.stop(None)  # Ensure a graceful shutdown
+        server.stop(None)  # Ensures a graceful shutdown.
 
 
 if __name__ == "__main__":
