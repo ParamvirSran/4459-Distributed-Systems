@@ -1,0 +1,3 @@
+2024-03-05 19:22:16 - Write request - Key: 1, Value: book. Server ACK: Write operation successful for 1
+2024-03-05 19:22:20 - Write request - Key: 3, Value: dog. Server ACK: Write operation successful for 3
+2024-03-05 19:22:25 - Write request - Key: 8, Value: cat. Server ACK: Write operation successful for 8
