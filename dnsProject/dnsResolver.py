@@ -96,3 +96,48 @@ def resolve(domain_name, record_type):
             nameserver = resolve(ns_domain, TYPE_A)
         else:
             raise Exception("something went wrong")
+
+
+def main():
+    # Define the server address and port
+    server_address = (
+        "0.0.0.0"  # Use '0.0.0.0' to accept connections on all network interfaces
+    )
+    server_port = (
+        5353  # Port number for the DNS server (use a non-standard port for testing)
+    )
+
+    # Create a UDP socket
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server_socket:
+        # Bind the socket to the server address and port
+        server_socket.bind((server_address, server_port))
+        print(f"DNS Resolver Server is running on {server_address}:{server_port}")
+
+        # Server loop
+        while True:
+            # Wait for a query
+            query, client_address = server_socket.recvfrom(
+                1024
+            )  # DNS query size limit is 512 bytes for UDP
+
+            try:
+                # Parse the received query packet
+                query_packet = parse_dns_packet(query)
+                domain_name = decode_name(BytesIO(query_packet.questions[0].name))
+                record_type = query_packet.questions[0].type_
+
+                # Resolve the domain name
+                resolved_ip = resolve(domain_name, record_type)
+
+                if resolved_ip:
+                    # For simplicity, we'll just print the resolved IP address to the console
+                    # In a real DNS server, you would construct a response packet and send it back to the client
+                    print(f"Resolved {domain_name} to {resolved_ip}")
+                else:
+                    print(f"Could not resolve {domain_name}")
+            except Exception as e:
+                print(f"Error resolving query: {e}")
+
+
+if __name__ == "__main__":
+    main()
