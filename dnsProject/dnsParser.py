@@ -28,41 +28,33 @@ class DNSPacket:
 
 
 def parse_header(reader):
-    items = struct.unpack("!HHHHHH", reader.read(12))
-    return DNSHeader(*items)
-
-
-def decode_name_simple(reader):
-    parts = []
-    while (length := reader.read(1)[0]) != 0:
-        parts.append(reader.read(length))
-    return b".".join(parts)
+    data = reader.read(12)
+    id_, flags, num_questions, num_answers, num_authorities, num_additionals = (
+        struct.unpack("!HHHHHH", data)
+    )
+    return DNSHeader(
+        id_, flags, num_questions, num_answers, num_authorities, num_additionals
+    )
 
 
 def parse_question(reader):
-    name = decode_name_simple(reader)
+    name = decode_name(reader)
     data = reader.read(4)
     type_, class_ = struct.unpack("!HH", data)
     return DNSQuestion(name, type_, class_)
 
 
-def parse_record(reader):
-    name = decode_name_simple(reader)
-    data = reader.read(10)
-    type_, class_, ttl, data_len = struct.unpack("!HHIH", data)
-    data = reader.read(data_len)
-    return DNSRecord(name, type_, class_, ttl, data)
-
-
 def decode_name(reader):
-    parts = []
-    while (length := reader.read(1)[0]) != 0:
-        if length & 192:
-            parts.append(decode_compressed_name(length, reader))
+    name = []
+    while True:
+        length = reader.read(1)[0]
+        if length == 0:
             break
-        else:
-            parts.append(reader.read(length))
-    return b".".join(parts)
+        if (length & 192) == 192:
+            name.append(decode_compressed_name(length, reader))
+            break
+        name.append(reader.read(length).decode("ascii"))
+    return ".".join(name)
 
 
 def decode_compressed_name(length, reader):
@@ -79,7 +71,10 @@ def parse_record(reader):
     name = decode_name(reader)
     data = reader.read(10)
     type_, class_, ttl, data_len = struct.unpack("!HHIH", data)
-    data = reader.read(data_len)
+    if type_ == TYPE_A:
+        data = reader.read(data_len)
+    else:
+        data = reader.read(data_len)
     return DNSRecord(name, type_, class_, ttl, data)
 
 
@@ -94,13 +89,13 @@ def parse_dns_packet(data):
 
 
 def ip_to_string(ip):
-    return ".".join([str(x) for x in ip])
+    return ".".join(str(byte) for byte in ip)
 
 
 def lookup_domain(domain_name):
     query = build_query(domain_name, TYPE_A)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.sendto(query, ("8.8.8.8", 53))
-    data, _ = sock.recvfrom(1024)
-    response = parse_dns_packet(data)
-    return ip_to_string(response.answers[0].data)
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client_socket:
+        client_socket.sendto(query, ("localhost", 6969))
+        response, _ = client_socket.recvfrom(1024)
+        packet = parse_dns_packet(response)
+        return packet.answers[0].data

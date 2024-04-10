@@ -19,42 +19,51 @@ TYPE_A = 1
 TYPE_NS = 2
 import struct
 
-TYPE_A = 1
 CLASS_IN = 1
 from io import BytesIO
 
+nameserver = "198.41.0.4"
 from dnsParser import decode_name, parse_header, parse_question
 
 
+# build a dns query from a domain name and record type
 def build_query(domain_name, record_type):
     name = encode_dns_name(domain_name)
     id = random.randint(0, 65535)
-    header = DNSHeader(id=id, num_questions=1, flags=0)
-    question = DNSQuestion(name=name, type_=record_type, class_=CLASS_IN)
+    header = DNSHeader(
+        id=id,
+        flags=0,
+        num_questions=1,
+        num_answers=0,
+        num_authorities=0,
+        num_additionals=0,
+    )
+    question = DNSQuestion(name, record_type, CLASS_IN)
     return header_to_bytes(header) + question_to_bytes(question)
 
 
+# send a dns query to a nameserver and return the response
 def send_query(ip_address, domain_name, record_type):
     query = build_query(domain_name, record_type)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.sendto(query, (ip_address, 53))
-    data, _ = sock.recvfrom(1024)
-    return parse_dns_packet(data)
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client_socket:
+        client_socket.sendto(query, (ip_address, 53))
+        response, _ = client_socket.recvfrom(1024)
+        return parse_dns_packet(response)
 
 
+# parse a dns record from raw bytes (used for parsing answers, authorities, and additionals)
 def parse_record(reader):
     name = decode_name(reader)
     data = reader.read(10)
     type_, class_, ttl, data_len = struct.unpack("!HHIH", data)
-    if type_ == TYPE_NS:
-        data = decode_name(reader)
-    elif type_ == TYPE_A:
-        data = ip_to_string(reader.read(data_len))
+    if type_ == TYPE_A:
+        data = reader.read(data_len)
     else:
         data = reader.read(data_len)
     return DNSRecord(name, type_, class_, ttl, data)
 
 
+# parse a dns packet from raw bytes
 def parse_dns_packet(data):
     reader = BytesIO(data)
     header = parse_header(reader)
@@ -68,75 +77,89 @@ def parse_dns_packet(data):
 def get_answer(packet):
     for x in packet.answers:
         if x.type_ == TYPE_A:
-            return x.data
+            return ip_to_string(x.data)
 
 
 def get_nameserver_ip(packet):
-    for x in packet.additionals:
+    for x in packet.authorities:
         if x.type_ == TYPE_A:
-            return x.data
+            return ip_to_string(x.data)
 
 
 def get_nameserver(packet):
     for x in packet.authorities:
         if x.type_ == TYPE_NS:
-            return x.data.decode("utf-8")
+            return x.data
 
 
 def resolve(domain_name, record_type):
-    nameserver = "198.41.0.4"
-    while True:
-        print(f"Querying {nameserver} for {domain_name}")
-        response = send_query(nameserver, domain_name, record_type)
-        if ip := get_answer(response):
-            return ip
-        elif nsIP := get_nameserver_ip(response):
-            nameserver = nsIP
-        elif ns_domain := get_nameserver(response):
-            nameserver = resolve(ns_domain, TYPE_A)
-        else:
-            raise Exception("something went wrong")
+    # Assuming 'nameserver' is initialized earlier or passed as an argument
+    # This simplified example needs to be expanded based on actual logic for iterating NS records
+    response = send_query(nameserver, domain_name, record_type)
+    if response.header.flags & 0x0F == 3:
+        # NXDOMAIN, domain does not exist
+        return None
+    elif response.answers:
+        # Found an answer, return the first A record's IP
+        for answer in response.answers:
+            if answer.type_ == TYPE_A:
+                return ip_to_string(answer.data)
+    # Additional handling for other cases
+    return None
+
+
+def serialize_dns_response(request, ip):
+    writer = BytesIO()
+    writer.write(header_to_bytes(request.header))  # Copy request header to response
+    for question in request.questions:
+        writer.write(question_to_bytes(question))  # Include question in response
+    if ip:
+        ip_bytes = socket.inet_aton(ip)
+        answer_section = struct.pack("!HHIH", TYPE_A, CLASS_IN, 300, 4) + ip_bytes
+        writer.write(answer_section)
+    else:
+        # Modify response header for error, e.g., NXDOMAIN (name does not exist)
+        # This example directly manipulates 'writer' which may not reflect actual header modifications
+        # Consider adjusting the header flags to indicate an error
+        pass
+    return writer.getvalue()
 
 
 def main():
-    # Define the server address and port
-    server_address = (
-        "0.0.0.0"  # Use '0.0.0.0' to accept connections on all network interfaces
-    )
-    server_port = (
-        5353  # Port number for the DNS server (use a non-standard port for testing)
-    )
+    server_address = "localhost"
+    server_port = 6969
 
-    # Create a UDP socket
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server_socket:
-        # Bind the socket to the server address and port
         server_socket.bind((server_address, server_port))
-        print(f"DNS Resolver Server is running on {server_address}:{server_port}")
+        print(f"Listening on {server_address}:{server_port}")
 
-        # Server loop
         while True:
-            # Wait for a query
-            query, client_address = server_socket.recvfrom(
-                1024
-            )  # DNS query size limit is 512 bytes for UDP
+            data, addr = server_socket.recvfrom(1024)
+            print(f"Received query from {addr}")
+            print(data)
 
             try:
-                # Parse the received query packet
-                query_packet = parse_dns_packet(query)
-                domain_name = decode_name(BytesIO(query_packet.questions[0].name))
-                record_type = query_packet.questions[0].type_
+                request = parse_dns_packet(data)
+                print(f"Parsed query: {request}")
 
-                # Resolve the domain name
-                resolved_ip = resolve(domain_name, record_type)
+                domain_name = request.questions[0].name
+                print(f"Received query for {domain_name}")
 
-                if resolved_ip:
-                    # For simplicity, we'll just print the resolved IP address to the console
-                    # In a real DNS server, you would construct a response packet and send it back to the client
-                    print(f"Resolved {domain_name} to {resolved_ip}")
-                else:
-                    print(f"Could not resolve {domain_name}")
+                record_type = request.questions[0].type_
+                print(f"Received query for {record_type}")
+                print("here")
+
+                ip = resolve(domain_name, record_type)
+                print(f"Resolved to {ip}")
+
+                response = serialize_dns_response(request, ip)
+                server_socket.sendto(response, addr)
+                print(f"Sent response to {addr}")
             except Exception as e:
-                print(f"Error resolving query: {e}")
+                print(f"Error: {e}")
+                server_socket.sendto(b"\x00", addr)
+                print(f"Sent error response to {addr}")
+                continue
 
 
 if __name__ == "__main__":
