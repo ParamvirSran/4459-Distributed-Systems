@@ -1,13 +1,10 @@
 import dataclasses
 import random
-import socket
-import struct
-from dataclasses import dataclass
-
-random.seed(1)
 
 TYPE_A = 1
 CLASS_IN = 1
+import struct
+from dataclasses import dataclass
 
 
 @dataclass
@@ -50,15 +47,3 @@ def build_query(domain_name, record_type):
     header = DNSHeader(id=id, num_questions=1, flags=RECURSION_DESIRED)
     question = DNSQuestion(name=name, type_=record_type, class_=CLASS_IN)
     return header_to_bytes(header) + question_to_bytes(question)
-
-
-def main():
-    query = build_query("www.example.com", TYPE_A)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.sendto(query, ("8.8.8.8", 53))
-    response, _ = sock.recvfrom(1024)
-    print("Response received:", response)
-
-
-if __name__ == "__main__":
-    main()
