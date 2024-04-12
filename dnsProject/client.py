@@ -1,35 +1,53 @@
+# 4459 Group Project - DNS Resolver
+# Client script that sends requests to the server to resolve domain names
+
 import socket
 
-# Assuming dnsQuery.py is available for building queries
-import dnsQuery
+import dns
 
-TYPE_A = 1
+# server address and port
 server_address = "localhost"
-server_port = 6969
-domain_name = "example.com"
-record_type = TYPE_A
+server_port = 3599
+
+# record types
+TYPE_A = 1
+TYPE_NS = 2
 
 
+# main function to get domain name from user and send it to the server
 def main():
-    # Prepare the DNS query
-    query = dnsQuery.build_query(domain_name, record_type)
+    print('\nFormat of domain name is: "google.com"')
+    domain = input("Enter domain name or 'exit': ")
 
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client_socket:
-        # Send the DNS query to the server
+    # while the user does not input "exit", keep asking for a domain name
+    while domain.lower() != "exit":
+        # Create a UDP socket
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+        # Create a DNS query
+        query = dns.build_query(domain, TYPE_A)
+
+        # Send the query to the server
         client_socket.sendto(query, (server_address, server_port))
 
         # Receive the response from the server
-        data, addr = client_socket.recvfrom(1024)
+        response, _ = client_socket.recvfrom(1024)
 
-        # Simply print the raw response data
-        # Normally, the client should parse this data to read the response,
-        # but parsing DNS packets is non-trivial and typically handled by libraries
-        print(f"Received response from {addr}")
-        print(f"Response: {data}")
+        # convert ip address from bytes to string
+        str_response = dns.ip_to_string(response)
 
-        # The client generally wouldn't perform DNS resolution itself
-        # or attempt to parse the DNS response packet directly without a library.
-        # Instead, it would use higher-level libraries or system calls for such tasks.
+        # if the ip address was not resolved by server print an error message else print the ip address
+        if str_response == "0.0.0.0":
+            print(f"Could not resolve {domain}")
+        else:
+            print(str_response)
+
+        client_socket.close()  # close the socket
+
+        print('\nFormat of domain name is: "google.com"')
+        domain = input("Enter domain name or 'exit': ")
+
+    print("Exiting...")
 
 
 if __name__ == "__main__":
